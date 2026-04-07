@@ -243,7 +243,7 @@ def train_models():
     X_train, X_test, y_train, y_test = train_test_split(X_scaled_df, y, test_size=0.2, random_state=42)
 
     # ── KNN (Optimized Parameters) ─────────────────────────────────────────
-    knn = KNeighborsRegressor(n_neighbors=11, weights='distance', metric='euclidean')
+    knn = KNeighborsRegressor(n_neighbors=11, weights='distance', metric='euclidean', n_jobs=1)
     knn.fit(X_train, y_train)
 
     # ── SVM (Optimized Parameters) ─────────────────────────────────────────
@@ -254,7 +254,7 @@ def train_models():
     xgb = XGBRegressor(
         n_estimators=300, learning_rate=0.05, max_depth=6, 
         subsample=0.8, colsample_bytree=0.8, min_child_weight=3,
-        reg_alpha=0.1, reg_lambda=1.5, verbosity=0, random_state=42
+        reg_alpha=0.1, reg_lambda=1.5, verbosity=0, random_state=42, n_jobs=1
     )
     xgb.fit(X_train, y_train)
 
@@ -558,7 +558,7 @@ with tab1:
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font_color='#212529', height=280, margin=dict(t=40, b=10, l=20, r=20)
         )
-        st.plotly_chart(fig_gauge, width='stretch')
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
         model_names = list(pct_preds.keys())
         model_vals  = list(pct_preds.values())
@@ -582,7 +582,7 @@ with tab1:
             xaxis=dict(gridcolor='#dee2e6'),
             margin=dict(t=40, b=10, l=20, r=20)
         )
-        st.plotly_chart(fig_bar, width='stretch')
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     with col_side:
         categories = ['Phone\nUsage', 'Social\nMedia', 'Gaming', 'Laptop\nTotal', 'Before\nBed']
@@ -611,7 +611,7 @@ with tab1:
             height=280, margin=dict(t=50, b=10, l=40, r=40),
             showlegend=False
         )
-        st.plotly_chart(fig_radar, width='stretch')
+        st.plotly_chart(fig_radar, use_container_width=True)
 
         for model, pct in pct_preds.items():
             clr = risk_info(pct)[2]
@@ -673,7 +673,7 @@ with tab1:
             height=350, margin=dict(t=20, b=20, l=0, r=0),
             legend=dict(font=dict(size=11), bgcolor='rgba(0,0,0,0)')
         )
-        st.plotly_chart(fig_pie, width='stretch')
+        st.plotly_chart(fig_pie, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -709,7 +709,7 @@ with tab2:
                                 title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_hist.update_xaxes(gridcolor='#dee2e6')
         fig_hist.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_hist, width='stretch')
+        st.plotly_chart(fig_hist, use_container_width=True)
 
     with c2:
         fig_box = px.box(df_raw,
@@ -723,7 +723,7 @@ with tab2:
                                title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_box.update_xaxes(gridcolor='#dee2e6')
         fig_box.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_box, width='stretch')
+        st.plotly_chart(fig_box, use_container_width=True)
 
     c3, c4 = st.columns(2)
     with c3:
@@ -736,7 +736,7 @@ with tab2:
                                title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_sc1.update_xaxes(gridcolor='#dee2e6')
         fig_sc1.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_sc1, width='stretch')
+        st.plotly_chart(fig_sc1, use_container_width=True)
 
     with c4:
         fig_sc2 = px.scatter(df_raw, x='Sleep_Hours', y='Addiction_Level',
@@ -748,7 +748,7 @@ with tab2:
                                title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_sc2.update_xaxes(gridcolor='#dee2e6')
         fig_sc2.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_sc2, width='stretch')
+        st.plotly_chart(fig_sc2, use_container_width=True)
 
     st.markdown('<div class="section-header">Laptop Usage Analysis</div>', unsafe_allow_html=True)
     lc1, lc2, lc3 = st.columns(3)
@@ -768,7 +768,7 @@ with tab2:
                                  margin=dict(t=40,b=20,l=20,r=20))
             fig_l.update_xaxes(gridcolor='#dee2e6')
             fig_l.update_yaxes(gridcolor='#dee2e6')
-            st.plotly_chart(fig_l, width='stretch')
+            st.plotly_chart(fig_l, use_container_width=True)
 
     st.markdown('<div class="section-header">Demographics</div>', unsafe_allow_html=True)
     d1, d2 = st.columns(2)
@@ -781,7 +781,7 @@ with tab2:
                              font_color='#212529', height=280, showlegend=False,
                              title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_g.update_xaxes(gridcolor='#dee2e6'); fig_g.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_g, width='stretch')
+        st.plotly_chart(fig_g, use_container_width=True)
 
     with d2:
         grade_avg = df_raw.groupby('School_Grade')['Addiction_Level'].mean().reset_index()
@@ -797,7 +797,7 @@ with tab2:
                               font_color='#212529', height=280,
                               title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_gr.update_xaxes(gridcolor='#dee2e6'); fig_gr.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_gr, width='stretch')
+        st.plotly_chart(fig_gr, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -836,7 +836,7 @@ with tab3:
         xaxis=dict(gridcolor='#dee2e6'),
         margin=dict(t=50, b=20, l=20, r=20)
     )
-    st.plotly_chart(fig_acc, width='stretch')
+    st.plotly_chart(fig_acc, use_container_width=True)
 
     # ── Best Hyperparameters Found ────────────────────────────────────────
     st.markdown('<div class="section-header">Best Hyperparameters (GridSearch / RandomSearch CV)</div>',
@@ -883,7 +883,7 @@ with tab3:
         xaxis=dict(gridcolor='#dee2e6', title='Importance Score'),
         margin=dict(t=50, b=20, l=200, r=80)
     )
-    st.plotly_chart(fig_fi, width='stretch')
+    st.plotly_chart(fig_fi, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FOOTER
