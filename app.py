@@ -244,61 +244,60 @@ def train_models():
 
     # ── KNN Hyperparameter Tuning (GridSearchCV) ──────────────────────────
     knn_param_grid = {
-        'n_neighbors': [3, 5, 7, 9, 11, 15, 21],
+        'n_neighbors': [3, 5, 7, 11, 15],
         'weights': ['uniform', 'distance'],
-        'metric': ['euclidean', 'manhattan', 'minkowski'],
-        'p': [1, 2, 3],
+        'metric': ['euclidean', 'manhattan'],
     }
     knn_search = GridSearchCV(
         KNeighborsRegressor(), knn_param_grid,
-        cv=5, scoring='r2', n_jobs=-1
+        cv=3, scoring='r2', n_jobs=-1
     )
     knn_search.fit(X_train, y_train)
     knn = knn_search.best_estimator_
 
     # ── SVM Hyperparameter Tuning (GridSearchCV) ─────────────────────────
     svm_param_grid = {
-        'kernel': ['rbf', 'poly'],
-        'C': [0.1, 1, 10, 50, 100],
-        'epsilon': [0.01, 0.05, 0.1, 0.2],
+        'kernel': ['rbf'],
+        'C': [1, 10, 50, 100],
+        'epsilon': [0.01, 0.05, 0.1],
         'gamma': ['scale', 'auto'],
     }
     svm_search = GridSearchCV(
         SVR(), svm_param_grid,
-        cv=5, scoring='r2', n_jobs=-1
+        cv=3, scoring='r2', n_jobs=-1
     )
     svm_search.fit(X_train, y_train)
     svm = svm_search.best_estimator_
 
     # ── XGBoost Hyperparameter Tuning (RandomizedSearchCV) ───────────────
     xgb_param_dist = {
-        'n_estimators': [200, 300, 500, 700],
-        'learning_rate': [0.01, 0.03, 0.05, 0.08, 0.1],
-        'max_depth': [4, 6, 8, 10, 12],
-        'subsample': [0.6, 0.7, 0.8, 0.9, 1.0],
-        'colsample_bytree': [0.6, 0.7, 0.8, 0.9, 1.0],
-        'min_child_weight': [1, 3, 5, 7],
-        'reg_alpha': [0, 0.01, 0.1, 0.5, 1.0],
-        'reg_lambda': [0.5, 1, 1.5, 2, 3],
+        'n_estimators': [200, 300, 500],
+        'learning_rate': [0.03, 0.05, 0.1],
+        'max_depth': [4, 6, 8],
+        'subsample': [0.7, 0.8, 0.9],
+        'colsample_bytree': [0.7, 0.8, 0.9],
+        'min_child_weight': [1, 3, 5],
+        'reg_alpha': [0, 0.1, 0.5],
+        'reg_lambda': [1, 1.5, 2],
     }
     xgb_search = RandomizedSearchCV(
         XGBRegressor(verbosity=0, random_state=42), xgb_param_dist,
-        n_iter=80, cv=5, scoring='r2', n_jobs=-1, random_state=42
+        n_iter=20, cv=3, scoring='r2', n_jobs=-1, random_state=42
     )
     xgb_search.fit(X_train, y_train)
     xgb = xgb_search.best_estimator_
 
     # ── Random Forest Hyperparameter Tuning (RandomizedSearchCV) ─────────
     rf_param_dist = {
-        'n_estimators': [200, 300, 500, 700, 1000],
-        'max_depth': [8, 12, 16, 20, 25, None],
-        'min_samples_split': [2, 3, 5, 8, 10],
-        'min_samples_leaf': [1, 2, 3, 4],
-        'max_features': ['sqrt', 'log2', 0.3, 0.5, 0.7, 0.9],
+        'n_estimators': [200, 300, 500],
+        'max_depth': [10, 16, 20, None],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4],
+        'max_features': ['sqrt', 0.5, 0.7],
     }
     rf_search = RandomizedSearchCV(
         RandomForestRegressor(random_state=42, n_jobs=-1), rf_param_dist,
-        n_iter=80, cv=5, scoring='r2', n_jobs=-1, random_state=42
+        n_iter=20, cv=3, scoring='r2', n_jobs=-1, random_state=42
     )
     rf_search.fit(X_train, y_train)
     rf = rf_search.best_estimator_
@@ -632,7 +631,7 @@ with tab1:
             r=norm_vals + [norm_vals[0]],
             theta=categories + [categories[0]],
             fill='toself',
-            fillcolor=f'{risk_color}33',
+            fillcolor=f'rgba({int(risk_color[1:3],16)},{int(risk_color[3:5],16)},{int(risk_color[5:7],16)},0.2)',
             line=dict(color=risk_color, width=2),
             marker=dict(color=risk_color, size=6)
         ))
