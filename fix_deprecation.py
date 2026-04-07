@@ -1,0 +1,5 @@
+content = open('app.py', encoding='utf-8').read()
+count = content.count("use_container_width=True")
+new_content = content.replace("use_container_width=True", "width='stretch'")
+open('app.py', 'w', encoding='utf-8').write(new_content)
+print(f"Replaced {count} occurrences")

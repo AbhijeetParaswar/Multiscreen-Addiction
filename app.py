@@ -594,7 +594,7 @@ with tab1:
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font_color='#212529', height=280, margin=dict(t=40, b=10, l=20, r=20)
         )
-        st.plotly_chart(fig_gauge, use_container_width=True)
+        st.plotly_chart(fig_gauge, width='stretch')
 
         model_names = list(pct_preds.keys())
         model_vals  = list(pct_preds.values())
@@ -618,7 +618,7 @@ with tab1:
             xaxis=dict(gridcolor='#dee2e6'),
             margin=dict(t=40, b=10, l=20, r=20)
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
 
     with col_side:
         categories = ['Phone\nUsage', 'Social\nMedia', 'Gaming', 'Laptop\nTotal', 'Before\nBed']
@@ -647,7 +647,7 @@ with tab1:
             height=280, margin=dict(t=50, b=10, l=40, r=40),
             showlegend=False
         )
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, width='stretch')
 
         for model, pct in pct_preds.items():
             clr = risk_info(pct)[2]
@@ -709,7 +709,7 @@ with tab1:
             height=350, margin=dict(t=20, b=20, l=0, r=0),
             legend=dict(font=dict(size=11), bgcolor='rgba(0,0,0,0)')
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -745,7 +745,7 @@ with tab2:
                                 title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_hist.update_xaxes(gridcolor='#dee2e6')
         fig_hist.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, width='stretch')
 
     with c2:
         fig_box = px.box(df_raw,
@@ -759,7 +759,7 @@ with tab2:
                                title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_box.update_xaxes(gridcolor='#dee2e6')
         fig_box.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_box, width='stretch')
 
     c3, c4 = st.columns(2)
     with c3:
@@ -772,7 +772,7 @@ with tab2:
                                title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_sc1.update_xaxes(gridcolor='#dee2e6')
         fig_sc1.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_sc1, use_container_width=True)
+        st.plotly_chart(fig_sc1, width='stretch')
 
     with c4:
         fig_sc2 = px.scatter(df_raw, x='Sleep_Hours', y='Addiction_Level',
@@ -784,7 +784,7 @@ with tab2:
                                title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_sc2.update_xaxes(gridcolor='#dee2e6')
         fig_sc2.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_sc2, use_container_width=True)
+        st.plotly_chart(fig_sc2, width='stretch')
 
     st.markdown('<div class="section-header">Laptop Usage Analysis</div>', unsafe_allow_html=True)
     lc1, lc2, lc3 = st.columns(3)
@@ -804,7 +804,7 @@ with tab2:
                                  margin=dict(t=40,b=20,l=20,r=20))
             fig_l.update_xaxes(gridcolor='#dee2e6')
             fig_l.update_yaxes(gridcolor='#dee2e6')
-            st.plotly_chart(fig_l, use_container_width=True)
+            st.plotly_chart(fig_l, width='stretch')
 
     st.markdown('<div class="section-header">Demographics</div>', unsafe_allow_html=True)
     d1, d2 = st.columns(2)
@@ -817,7 +817,7 @@ with tab2:
                              font_color='#212529', height=280, showlegend=False,
                              title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_g.update_xaxes(gridcolor='#dee2e6'); fig_g.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_g, use_container_width=True)
+        st.plotly_chart(fig_g, width='stretch')
 
     with d2:
         grade_avg = df_raw.groupby('School_Grade')['Addiction_Level'].mean().reset_index()
@@ -833,7 +833,7 @@ with tab2:
                               font_color='#212529', height=280,
                               title_font=dict(family='Inter', size=12, color='#6c757d'))
         fig_gr.update_xaxes(gridcolor='#dee2e6'); fig_gr.update_yaxes(gridcolor='#dee2e6')
-        st.plotly_chart(fig_gr, use_container_width=True)
+        st.plotly_chart(fig_gr, width='stretch')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -872,7 +872,7 @@ with tab3:
         xaxis=dict(gridcolor='#dee2e6'),
         margin=dict(t=50, b=20, l=20, r=20)
     )
-    st.plotly_chart(fig_acc, use_container_width=True)
+    st.plotly_chart(fig_acc, width='stretch')
 
     # ── Best Hyperparameters Found ────────────────────────────────────────
     st.markdown('<div class="section-header">Best Hyperparameters (GridSearch / RandomSearch CV)</div>',
@@ -919,7 +919,7 @@ with tab3:
         xaxis=dict(gridcolor='#dee2e6', title='Importance Score'),
         margin=dict(t=50, b=20, l=200, r=80)
     )
-    st.plotly_chart(fig_fi, use_container_width=True)
+    st.plotly_chart(fig_fi, width='stretch')
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FOOTER
