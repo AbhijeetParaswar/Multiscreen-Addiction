@@ -242,71 +242,35 @@ def train_models():
 
     X_train, X_test, y_train, y_test = train_test_split(X_scaled_df, y, test_size=0.2, random_state=42)
 
-    # ── KNN Hyperparameter Tuning (GridSearchCV) ──────────────────────────
-    knn_param_grid = {
-        'n_neighbors': [3, 5, 7, 11, 15],
-        'weights': ['uniform', 'distance'],
-        'metric': ['euclidean', 'manhattan'],
-    }
-    knn_search = GridSearchCV(
-        KNeighborsRegressor(), knn_param_grid,
-        cv=3, scoring='r2', n_jobs=-1
-    )
-    knn_search.fit(X_train, y_train)
-    knn = knn_search.best_estimator_
+    # ── KNN (Optimized Parameters) ─────────────────────────────────────────
+    knn = KNeighborsRegressor(n_neighbors=11, weights='distance', metric='euclidean')
+    knn.fit(X_train, y_train)
 
-    # ── SVM Hyperparameter Tuning (GridSearchCV) ─────────────────────────
-    svm_param_grid = {
-        'kernel': ['rbf'],
-        'C': [1, 10, 50, 100],
-        'epsilon': [0.01, 0.05, 0.1],
-        'gamma': ['scale', 'auto'],
-    }
-    svm_search = GridSearchCV(
-        SVR(), svm_param_grid,
-        cv=3, scoring='r2', n_jobs=-1
-    )
-    svm_search.fit(X_train, y_train)
-    svm = svm_search.best_estimator_
+    # ── SVM (Optimized Parameters) ─────────────────────────────────────────
+    svm = SVR(C=10, epsilon=0.01, gamma='auto', kernel='rbf')
+    svm.fit(X_train, y_train)
 
-    # ── XGBoost Hyperparameter Tuning (RandomizedSearchCV) ───────────────
-    xgb_param_dist = {
-        'n_estimators': [200, 300, 500],
-        'learning_rate': [0.03, 0.05, 0.1],
-        'max_depth': [4, 6, 8],
-        'subsample': [0.7, 0.8, 0.9],
-        'colsample_bytree': [0.7, 0.8, 0.9],
-        'min_child_weight': [1, 3, 5],
-        'reg_alpha': [0, 0.1, 0.5],
-        'reg_lambda': [1, 1.5, 2],
-    }
-    xgb_search = RandomizedSearchCV(
-        XGBRegressor(verbosity=0, random_state=42), xgb_param_dist,
-        n_iter=20, cv=3, scoring='r2', n_jobs=-1, random_state=42
+    # ── XGBoost (Optimized Parameters) ─────────────────────────────────────
+    xgb = XGBRegressor(
+        n_estimators=300, learning_rate=0.05, max_depth=6, 
+        subsample=0.8, colsample_bytree=0.8, min_child_weight=3,
+        reg_alpha=0.1, reg_lambda=1.5, verbosity=0, random_state=42
     )
-    xgb_search.fit(X_train, y_train)
-    xgb = xgb_search.best_estimator_
+    xgb.fit(X_train, y_train)
 
-    # ── Random Forest Hyperparameter Tuning (RandomizedSearchCV) ─────────
-    rf_param_dist = {
-        'n_estimators': [200, 300, 500],
-        'max_depth': [10, 16, 20, None],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'max_features': ['sqrt', 0.5, 0.7],
-    }
-    rf_search = RandomizedSearchCV(
-        RandomForestRegressor(random_state=42, n_jobs=-1), rf_param_dist,
-        n_iter=20, cv=3, scoring='r2', n_jobs=-1, random_state=42
+    # ── Random Forest (Optimized Parameters) ───────────────────────────────
+    rf = RandomForestRegressor(
+        n_estimators=300, max_depth=16, min_samples_split=5, 
+        min_samples_leaf=2, max_features='sqrt',
+        random_state=42, n_jobs=1
     )
-    rf_search.fit(X_train, y_train)
-    rf = rf_search.best_estimator_
+    rf.fit(X_train, y_train)
 
     best_params = {
-        'KNN': knn_search.best_params_,
-        'SVM': svm_search.best_params_,
-        'XGBoost': xgb_search.best_params_,
-        'Random Forest': rf_search.best_params_,
+        'KNN': {'n_neighbors': 11, 'weights': 'distance', 'metric': 'euclidean'},
+        'SVM': {'C': 10, 'epsilon': 0.01, 'gamma': 'auto', 'kernel': 'rbf'},
+        'XGBoost': {'n_estimators': 300, 'learning_rate': 0.05, 'max_depth': 6, 'subsample': 0.8, 'colsample_bytree': 0.8},
+        'Random Forest': {'n_estimators': 300, 'max_depth': 16, 'min_samples_split': 5, 'min_samples_leaf': 2},
     }
 
     model_scores = {
