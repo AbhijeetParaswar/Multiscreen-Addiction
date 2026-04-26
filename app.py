@@ -13,6 +13,9 @@ from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.metrics import r2_score
+from sklearn.pipeline import Pipeline
+from sklearn.decomposition import PCA
+from sklearn.feature_selection import SelectKBest, mutual_info_regression
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -242,9 +245,36 @@ def train_models():
 
     X_train, X_test, y_train, y_test = train_test_split(X_scaled_df, y, test_size=0.2, random_state=42)
 
-    # ── KNN (Optimized Parameters) ─────────────────────────────────────────
-    knn = KNeighborsRegressor(n_neighbors=11, weights='distance', metric='euclidean', n_jobs=1)
-    knn.fit(X_train, y_train)
+    #KNN with feature selection and PCA in pipeline
+    knn_pipe = Pipeline([
+        ('feature_selection', SelectKBest(score_func=mutual_info_regression)),
+        ('pca', PCA(random_state=42)),
+        ('knn', KNeighborsRegressor(n_jobs=-1))
+    ])
+
+    knn_param_grid = {
+        'feature_selection__k': ['all', 12, 15, 18],     
+        'pca__n_components': [0.90, 0.95, None],         
+        'knn__n_neighbors': np.arange(3, 51),           
+        'knn__weights': ['uniform', 'distance'],
+        'knn__metric': ['euclidean', 'manhattan', 'minkowski'],
+        'knn__p': [1, 2, 3],                             
+        'knn__leaf_size': [20, 30, 40, 50]
+    }
+
+    # Cross-Validation and Hyperparameter Search
+    knn_search = RandomizedSearchCV(
+        estimator=knn_pipe,
+        param_distributions=knn_param_grid,
+        n_iter=40,               
+        cv=5,                    
+        scoring='r2',
+        n_jobs=-1,             
+        random_state=42
+    )
+
+    knn_search.fit(X_train, y_train)
+    knn = knn_search.best_estimator_
 
     # ── SVM (Optimized Parameters) ─────────────────────────────────────────
     svm = SVR(C=10, epsilon=0.01, gamma='auto', kernel='rbf')
