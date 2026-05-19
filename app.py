@@ -1,4 +1,8 @@
 import os
+
+# Must be set before ChromaDB / protobuf-using deps load (deploy fix)
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
 import streamlit as st
 import pandas as pd
 import numpy as np

@@ -7,6 +7,10 @@ and general knowledge questions.
 """
 
 import os
+
+# ChromaDB / OpenTelemetry protobuf compatibility (Streamlit Cloud & mobile deploy)
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+
 import glob
 import hashlib
 import pandas as pd
