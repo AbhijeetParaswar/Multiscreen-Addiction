@@ -1,3 +1,34 @@
+# Python
 .venv/
+venv/
 __pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Secrets & local config
 .env
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# App runtime / generated (rebuilt on startup)
+chroma_db/
+chat_history.db
+
+# Dev-only scripts & test output
+scratch/
+extract_params.py
+fix_deprecation.py
+
+# Logs
+*.log

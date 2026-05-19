@@ -5,3 +5,10 @@ plotly>=5.20.0
 scikit-learn>=1.4.0
 xgboost>=2.0.0
 statsmodels>=0.14.0
+# RAG Chatbot dependencies
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-ollama>=0.2.0
+langchain-core>=0.3.0
+chromadb>=0.5.0
+sentence-transformers>=3.0.0

@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,6 +6,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 import warnings
 warnings.filterwarnings('ignore')
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
@@ -163,6 +167,137 @@ html, body, [class*="css"] {
     background: #dee2e6;
     border: none;
     margin: 1.5rem 0;
+}
+
+/* ── Chatbot Styles ──────────────────────────────────────── */
+.chat-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+.chat-header {
+    background: linear-gradient(135deg, #1a73e8 0%, #6f42c1 100%);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(26,115,232,0.3);
+}
+.chat-header h2 {
+    font-family: 'Inter', sans-serif;
+    color: white;
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 1px;
+}
+.chat-header p {
+    color: rgba(255,255,255,0.8);
+    font-size: 0.8rem;
+    margin: 0.3rem 0 0 0;
+    letter-spacing: 0.5px;
+}
+.session-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 20px;
+    padding: 0.3rem 1rem;
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.9);
+    margin-top: 0.5rem;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.5px;
+}
+.model-status, .model-status * {
+    color: #1a73e8 !important;
+}
+.model-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0f7ff !important;
+    border: 1px solid #d0e3ff !important;
+    border-radius: 8px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+.model-status .dot {
+    width: 8px;
+    height: 8px;
+    background: #28a745;
+    border-radius: 50%;
+    animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Explicit Chat Message Styles — Ensures 100% visibility in Light/Dark modes */
+[data-testid="stChatMessage"] {
+    background-color: #ffffff !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 12px !important;
+    padding: 1.2rem !important;
+    margin-bottom: 1rem !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.04) !important;
+}
+
+/* User Message Styling — Soft blue theme */
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"] img[alt*="🧑‍💻"]),
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"] [aria-label*="🧑‍💻"]),
+[data-testid="stChatMessage"]:has(span:contains("🧑‍💻")) {
+    background-color: #e3f2fd !important;
+    border-color: #cfe2ff !important;
+}
+
+/* Guarantee dark, crisp text for all message contents */
+[data-testid="stChatMessage"] * {
+    color: #212529 !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Code block & inline code visibility fixes */
+[data-testid="stChatMessage"] code {
+    background-color: #f1f3f5 !important;
+    color: #d63384 !important;
+    padding: 0.2rem 0.4rem !important;
+    border-radius: 4px !important;
+    font-size: 0.85em !important;
+    font-family: monospace !important;
+}
+[data-testid="stChatMessage"] pre {
+    background-color: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 1rem !important;
+    border-radius: 8px !important;
+    margin: 0.5rem 0 !important;
+    overflow-x: auto !important;
+}
+[data-testid="stChatMessage"] pre code {
+    background-color: transparent !important;
+    color: #212529 !important;
+    padding: 0 !important;
+}
+.chat-suggestion {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    margin: 0.3rem 0;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    color: #495057;
+    transition: all 0.2s ease;
+}
+.chat-suggestion:hover {
+    background: #e3f2fd;
+    border-color: #1a73e8;
+    color: #1a73e8;
 }
 
 /* Footer */
@@ -433,7 +568,7 @@ st.markdown('<hr class="neon-divider">', unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["PREDICT YOUR ADDICTION", "DATASET INSIGHTS", "MODEL PERFORMANCE"])
+tab1, tab2, tab3, tab4 = st.tabs(["PREDICT YOUR ADDICTION", "DATASET INSIGHTS", "MODEL PERFORMANCE", "AI CHATBOT"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -885,13 +1020,227 @@ with tab3:
     )
     st.plotly_chart(fig_fi, use_container_width=True)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — AI CHATBOT (RAG + Ollama + Persistent History)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab4:
+    import uuid
+    from chatbot import (
+        stream_ask, clear_chat_history, get_all_sessions,
+        get_session_preview, initialize_chatbot, build_vector_db
+    )
+
+    # ── Initialize session state ──────────────────────────────────────────────
+    if "chat_session_id" not in st.session_state:
+        st.session_state.chat_session_id = str(uuid.uuid4())[:8]
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+    if "ollama_model" not in st.session_state:
+        st.session_state.ollama_model = "gpt-oss:120b-cloud"
+    if "ollama_api_key" not in st.session_state:
+        st.session_state.ollama_api_key = os.getenv("OLLAMA_API_KEY", "")
+    if "chat_temperature" not in st.session_state:
+        st.session_state.chat_temperature = 0.7
+    if "chatbot_ready" not in st.session_state:
+        st.session_state.chatbot_ready = False
+    if "selected_suggestion" not in st.session_state:
+        st.session_state.selected_suggestion = None
+
+    # ── Chat Header ───────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class="chat-header">
+        <h2>AI RESEARCH ASSISTANT</h2>
+        <p>Powered by RAG + LangChain + Ollama Cloud — Ask anything about the dataset or screen addiction</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Sidebar: Chatbot Config ───────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("""
+        <div style='font-family:Inter,sans-serif;font-size:0.9rem;font-weight:600;
+        color:#6f42c1;text-align:center;padding:0.3rem 0;'
+        >AI CHATBOT CONFIG</div>
+        """, unsafe_allow_html=True)
+
+        st.session_state.ollama_api_key = st.text_input(
+            "Ollama API Key",
+            value=st.session_state.ollama_api_key,
+            type="password",
+            help="From ollama.com/settings/keys — required for cloud models in deployment",
+        )
+        st.session_state.ollama_model = st.text_input(
+            "Model",
+            value=st.session_state.ollama_model,
+            help="Default cloud model: gpt-oss:120b-cloud",
+        )
+        st.session_state.chat_temperature = st.slider(
+            "Temperature", 0.0, 1.0,
+            st.session_state.chat_temperature, 0.1,
+            help="Higher = more creative, Lower = more precise"
+        )
+
+        col_new, col_clear = st.columns(2)
+        with col_new:
+            if st.button("New Chat", use_container_width=True, type="primary"):
+                st.session_state.chat_session_id = str(uuid.uuid4())[:8]
+                st.session_state.chat_messages = []
+                st.rerun()
+        with col_clear:
+            if st.button("Clear History", use_container_width=True):
+                clear_chat_history(st.session_state.chat_session_id)
+                st.session_state.chat_messages = []
+                st.rerun()
+
+        # Session list
+        sessions = get_all_sessions()
+        if sessions:
+            st.markdown("**Recent Sessions**")
+            for sid in sessions[:5]:
+                preview = get_session_preview(sid)
+                label = f"{sid}: {preview}"
+                if st.button(
+                    label[:50] + ("..." if len(label) > 50 else ""),
+                    key=f"session_{sid}",
+                    use_container_width=True,
+                ):
+                    st.session_state.chat_session_id = sid
+                    # Load history from DB
+                    from chatbot import get_chat_history
+                    history = get_chat_history(sid)
+                    st.session_state.chat_messages = [
+                        {"role": "human" if m.type == "human" else "assistant",
+                         "content": m.content}
+                        for m in history.messages
+                    ]
+                    st.rerun()
+
+    # ── Build Vector DB on first use ──────────────────────────────────────────
+    if not st.session_state.chatbot_ready:
+        with st.spinner("Building vector database from dataset... (first time only)"):
+            try:
+                build_vector_db()
+                st.session_state.chatbot_ready = True
+            except Exception as e:
+                st.error(f"Failed to initialize chatbot: {e}")
+                st.session_state.chatbot_ready = False
+
+    if not st.session_state.chatbot_ready:
+        st.stop()
+
+    # ── Model status bar ──────────────────────────────────────────────────────
+    ollama_mode = "Cloud" if st.session_state.ollama_api_key.strip() else "Local"
+    st.markdown(f"""
+    <div class="model-status">
+        <div class="dot"></div>
+        Model: <strong>{st.session_state.ollama_model}</strong>
+        &nbsp;|&nbsp; Ollama: <strong>{ollama_mode}</strong>
+        &nbsp;|&nbsp; Session: <strong>{st.session_state.chat_session_id}</strong>
+        &nbsp;|&nbsp; Temp: <strong>{st.session_state.chat_temperature}</strong>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Suggested questions (show only when chat is empty) ────────────────────
+    if not st.session_state.chat_messages:
+        st.markdown("##### Try asking:")
+        suggestions = [
+            "What is the average addiction level in the dataset?",
+            "How does sleep affect screen addiction in teens?",
+            "Compare addiction levels between genders",
+            "What factors most strongly predict addiction?",
+            "What are effective strategies to reduce screen time?",
+            "How does parental control impact teen addiction?",
+        ]
+        suggestion_cols = st.columns(2)
+        for i, suggestion in enumerate(suggestions):
+            with suggestion_cols[i % 2]:
+                if st.button(
+                    f"💬 {suggestion}",
+                    key=f"suggestion_{i}",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_suggestion = suggestion
+                    st.rerun()
+
+    # ── Display chat history ──────────────────────────────────────────────────
+    for message in st.session_state.chat_messages:
+        role = message["role"]
+        avatar = "🧑‍💻" if role == "human" else "🤖"
+        with st.chat_message(role, avatar=avatar):
+            st.markdown(message["content"])
+
+    # ── Handle suggestion click ───────────────────────────────────────────────
+    prompt = None
+    if st.session_state.selected_suggestion:
+        prompt = st.session_state.selected_suggestion
+        st.session_state.selected_suggestion = None
+
+    # ── Chat input ────────────────────────────────────────────────────────────
+    user_input = st.chat_input(
+        "Ask about the dataset, screen addiction, or anything else...",
+    )
+    if user_input:
+        prompt = user_input
+
+    # ── Process question ──────────────────────────────────────────────────────
+    if prompt:
+        # Add user message
+        st.session_state.chat_messages.append({"role": "human", "content": prompt})
+        with st.chat_message("human", avatar="🧑‍💻"):
+            st.markdown(prompt)
+
+        # Generate response with streaming
+        with st.chat_message("assistant", avatar="🤖"):
+            try:
+                response_placeholder = st.empty()
+                full_response = ""
+
+                api_key = st.session_state.ollama_api_key.strip() or None
+                for chunk in stream_ask(
+                    question=prompt,
+                    session_id=st.session_state.chat_session_id,
+                    model_name=st.session_state.ollama_model,
+                    temperature=st.session_state.chat_temperature,
+                    ollama_api_key=api_key,
+                ):
+                    full_response += chunk
+                    response_placeholder.markdown(full_response + "▌")
+
+                response_placeholder.markdown(full_response)
+
+                # Save assistant message
+                st.session_state.chat_messages.append(
+                    {"role": "assistant", "content": full_response}
+                )
+
+            except Exception as e:
+                error_msg = str(e)
+                if "Connection" in error_msg or "refused" in error_msg or "401" in error_msg:
+                    st.error(
+                        f"**Cannot connect to Ollama.**\n\n"
+                        f"**Cloud:** Add your API key from "
+                        f"[ollama.com/settings/keys](https://ollama.com/settings/keys) "
+                        f"in the sidebar or set `OLLAMA_API_KEY` in `.env`.\n\n"
+                        f"**Local:** Install from [ollama.com](https://ollama.com), "
+                        f"run `ollama serve`, then `ollama pull {st.session_state.ollama_model}`.\n\n"
+                        f"Error: {error_msg}"
+                    )
+                else:
+                    st.error(f"Error generating response: {error_msg}")
+
+                st.session_state.chat_messages.append(
+                    {"role": "assistant",
+                     "content": f"⚠️ Error: {error_msg}"}
+                )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # FOOTER
 # ─────────────────────────────────────────────────────────────────────────────
 st.markdown('<hr class="neon-divider">', unsafe_allow_html=True)
 st.markdown("""
 <div class="footer">
-    MULTISCREEN ADDICTION DETECTOR  |  POWERED BY KNN | SVM | XGBOOST | RANDOM FOREST
+    MULTISCREEN ADDICTION DETECTOR  |  POWERED BY KNN | SVM | XGBOOST | RANDOM FOREST | RAG CHATBOT
     <br>TRAINED ON 3000 TEEN RECORDS  |  28 FEATURES  |  AI-POWERED DIGITAL WELLNESS ANALYSIS
 </div>
 """, unsafe_allow_html=True)
