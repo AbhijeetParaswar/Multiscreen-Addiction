@@ -15,6 +15,7 @@ except ImportError:
     pass
 
 import os
+import shutil
 import tempfile
 
 # ChromaDB / OpenTelemetry protobuf compatibility (Streamlit Cloud & mobile deploy)
@@ -45,13 +46,42 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 BASE_DIR = Path(__file__).parent
 
 
+def _is_streamlit_cloud() -> bool:
+    """Detect Streamlit Community Cloud (repo is read-only under /mount/)."""
+    base = str(BASE_DIR).replace("\\", "/")
+    if base.startswith("/mount/"):
+        return True
+    return bool(
+        os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT")
+        or os.environ.get("STREAMLIT_SHARING_MODE")
+    )
+
+
+def _configure_cloud_caches():
+    """Writable dirs for HuggingFace / Chroma on read-only deploy filesystem."""
+    cache_root = Path(tempfile.gettempdir()) / f"msa-cache-{os.getpid()}"
+    for name in ("hf", "transformers", "sentence_transformers"):
+        (cache_root / name).mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(cache_root / "hf")
+    os.environ["TRANSFORMERS_CACHE"] = str(cache_root / "transformers")
+    os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(cache_root / "sentence_transformers")
+
+
+IS_CLOUD = _is_streamlit_cloud()
+if IS_CLOUD:
+    _configure_cloud_caches()
+
+
 def _resolve_storage_paths():
-    """Use writable /tmp on Streamlit Cloud; project folder locally."""
-    if Path("/mount/src").exists():
-        root = Path(tempfile.gettempdir()) / "multiscreen-addiction"
-    else:
-        root = BASE_DIR
-    root.mkdir(parents=True, exist_ok=True)
+    """Cloud: writable /tmp only. Local: project folder."""
+    if IS_CLOUD:
+        root = Path(tempfile.gettempdir()) / f"msa-data-{os.getpid()}"
+        root.mkdir(parents=True, exist_ok=True)
+        chroma_dir = None
+        chat_db = root / "chat_history.db"
+        return chroma_dir, f"sqlite:///{chat_db}"
+
+    root = BASE_DIR
     chroma_dir = root / "chroma_db"
     chroma_dir.mkdir(parents=True, exist_ok=True)
     chat_db = root / "chat_history.db"
@@ -59,7 +89,12 @@ def _resolve_storage_paths():
 
 
 CHROMA_DIR, CHAT_DB = _resolve_storage_paths()
-DATASET_HASH_FILE = CHROMA_DIR / ".dataset_hash"
+DATASET_HASH_FILE = (
+    (CHROMA_DIR / ".dataset_hash") if CHROMA_DIR else None
+)
+
+# In-process cache (cloud uses in-memory Chroma — must not rebuild every message)
+_cached_vectordb: Chroma | None = None
 
 DEFAULT_MODEL = "gpt-oss:120b-cloud"
 OLLAMA_CLOUD_BASE_URL = "https://ollama.com"
@@ -374,21 +409,49 @@ def get_embeddings():
 
 
 def _chroma_is_valid() -> bool:
-    """True only if a complete persisted Chroma store exists."""
+    """True only if a complete persisted Chroma store exists (local only)."""
+    if IS_CLOUD or CHROMA_DIR is None or DATASET_HASH_FILE is None:
+        return False
     return (
         (CHROMA_DIR / "chroma.sqlite3").exists()
         and DATASET_HASH_FILE.exists()
     )
 
 
+def _build_documents(df: pd.DataFrame) -> list:
+    row_docs = _build_row_documents(df)
+    stat_docs = _build_statistical_documents(df)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=150,
+        separators=["\n\n", "\n", ". ", ", ", " "],
+    )
+    return splitter.split_documents(row_docs + stat_docs)
+
+
 def build_vector_db(force_rebuild: bool = False) -> Chroma:
     """
     Build or load the ChromaDB vector store.
-    Automatically rebuilds if dataset changes.
+    On Streamlit Cloud: in-memory only (repo filesystem is read-only).
     """
+    global _cached_vectordb
+
+    if _cached_vectordb is not None and not force_rebuild:
+        return _cached_vectordb
+
     embeddings = get_embeddings()
     df = _load_dataset()
     current_hash = _compute_dataset_hash(df)
+    split_docs = _build_documents(df)
+
+    if IS_CLOUD:
+        # No disk persistence — avoids "readonly database" on /mount/src
+        _cached_vectordb = Chroma.from_documents(
+            documents=split_docs,
+            embedding=embeddings,
+            collection_name="teen_addiction",
+        )
+        return _cached_vectordb
 
     need_rebuild = force_rebuild or not _chroma_is_valid()
     if not need_rebuild:
@@ -397,41 +460,33 @@ def build_vector_db(force_rebuild: bool = False) -> Chroma:
             need_rebuild = True
 
     if need_rebuild:
-        # Remove incomplete/corrupt store before rebuild
-        import shutil
         if CHROMA_DIR.exists():
             shutil.rmtree(CHROMA_DIR, ignore_errors=True)
         CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
-        row_docs = _build_row_documents(df)
-        stat_docs = _build_statistical_documents(df)
-        all_docs = row_docs + stat_docs
-
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=150,
-            separators=["\n\n", "\n", ". ", ", ", " "],
-        )
-        split_docs = splitter.split_documents(all_docs)
-
-        vectordb = Chroma.from_documents(
+        _cached_vectordb = Chroma.from_documents(
             documents=split_docs,
             embedding=embeddings,
             persist_directory=str(CHROMA_DIR),
             collection_name="teen_addiction",
         )
-
         DATASET_HASH_FILE.write_text(current_hash)
-        return vectordb
+        return _cached_vectordb
 
     try:
-        return Chroma(
+        _cached_vectordb = Chroma(
             persist_directory=str(CHROMA_DIR),
             embedding_function=embeddings,
             collection_name="teen_addiction",
         )
+        return _cached_vectordb
     except Exception:
         return build_vector_db(force_rebuild=True)
+
+
+def get_vector_db(force_rebuild: bool = False) -> Chroma:
+    """Return cached vector DB (single build per server process on cloud)."""
+    return build_vector_db(force_rebuild=force_rebuild)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -504,8 +559,8 @@ def create_rag_chain(
     - Chat history awareness
     - Ollama LLM (local or Ollama Cloud via OLLAMA_API_KEY)
     """
-    # Vector DB
-    vectordb = build_vector_db()
+    # Vector DB (cached — do not rebuild on every chat message)
+    vectordb = get_vector_db()
     retriever = vectordb.as_retriever(
         search_type="mmr",  # Maximal Marginal Relevance for diverse results
         search_kwargs={"k": 8, "fetch_k": 20},

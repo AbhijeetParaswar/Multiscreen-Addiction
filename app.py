@@ -1039,7 +1039,7 @@ with tab4:
     import uuid
     from chatbot import (
         stream_ask, clear_chat_history, get_all_sessions,
-        get_session_preview, initialize_chatbot, build_vector_db
+        get_session_preview,
     )
 
     # ── Initialize session state ──────────────────────────────────────────────
@@ -1127,14 +1127,19 @@ with tab4:
                     ]
                     st.rerun()
 
-    # ── Build Vector DB on first use ──────────────────────────────────────────
+    # ── Build Vector DB on first use (cached for cloud — read-only filesystem) ─
+    @st.cache_resource(show_spinner=False)
+    def _init_chatbot_vector_db():
+        from chatbot import get_vector_db
+        return get_vector_db(force_rebuild=True)
+
     if not st.session_state.chatbot_ready:
         with st.spinner(
             "Building vector database from dataset... "
             "(first load on cloud may take 2–3 minutes)"
         ):
             try:
-                build_vector_db()
+                _init_chatbot_vector_db()
                 st.session_state.chatbot_ready = True
             except Exception as e:
                 st.error(f"Failed to initialize chatbot: {e}")
