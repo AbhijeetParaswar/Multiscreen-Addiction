@@ -6,7 +6,16 @@ Persistent chat history via SQLite. Handles both dataset-specific
 and general knowledge questions.
 """
 
+# Streamlit Cloud: ChromaDB needs sqlite3 >= 3.35
+try:
+    __import__("pysqlite3")
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
+
 import os
+import tempfile
 
 # ChromaDB / OpenTelemetry protobuf compatibility (Streamlit Cloud & mobile deploy)
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
@@ -34,8 +43,22 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
-CHROMA_DIR = BASE_DIR / "chroma_db"
-CHAT_DB = f"sqlite:///{BASE_DIR / 'chat_history.db'}"
+
+
+def _resolve_storage_paths():
+    """Use writable /tmp on Streamlit Cloud; project folder locally."""
+    if Path("/mount/src").exists():
+        root = Path(tempfile.gettempdir()) / "multiscreen-addiction"
+    else:
+        root = BASE_DIR
+    root.mkdir(parents=True, exist_ok=True)
+    chroma_dir = root / "chroma_db"
+    chroma_dir.mkdir(parents=True, exist_ok=True)
+    chat_db = root / "chat_history.db"
+    return chroma_dir, f"sqlite:///{chat_db}"
+
+
+CHROMA_DIR, CHAT_DB = _resolve_storage_paths()
 DATASET_HASH_FILE = CHROMA_DIR / ".dataset_hash"
 
 DEFAULT_MODEL = "gpt-oss:120b-cloud"
@@ -350,6 +373,14 @@ def get_embeddings():
     )
 
 
+def _chroma_is_valid() -> bool:
+    """True only if a complete persisted Chroma store exists."""
+    return (
+        (CHROMA_DIR / "chroma.sqlite3").exists()
+        and DATASET_HASH_FILE.exists()
+    )
+
+
 def build_vector_db(force_rebuild: bool = False) -> Chroma:
     """
     Build or load the ChromaDB vector store.
@@ -359,20 +390,23 @@ def build_vector_db(force_rebuild: bool = False) -> Chroma:
     df = _load_dataset()
     current_hash = _compute_dataset_hash(df)
 
-    # Check if we need to rebuild
-    need_rebuild = force_rebuild or not CHROMA_DIR.exists()
-    if not need_rebuild and DATASET_HASH_FILE.exists():
+    need_rebuild = force_rebuild or not _chroma_is_valid()
+    if not need_rebuild:
         saved_hash = DATASET_HASH_FILE.read_text().strip()
         if saved_hash != current_hash:
             need_rebuild = True
 
     if need_rebuild:
-        # Build documents
+        # Remove incomplete/corrupt store before rebuild
+        import shutil
+        if CHROMA_DIR.exists():
+            shutil.rmtree(CHROMA_DIR, ignore_errors=True)
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+
         row_docs = _build_row_documents(df)
         stat_docs = _build_statistical_documents(df)
         all_docs = row_docs + stat_docs
 
-        # Split large docs into smaller chunks for better retrieval
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=150,
@@ -380,7 +414,6 @@ def build_vector_db(force_rebuild: bool = False) -> Chroma:
         )
         split_docs = splitter.split_documents(all_docs)
 
-        # Create ChromaDB
         vectordb = Chroma.from_documents(
             documents=split_docs,
             embedding=embeddings,
@@ -388,18 +421,17 @@ def build_vector_db(force_rebuild: bool = False) -> Chroma:
             collection_name="teen_addiction",
         )
 
-        # Save hash
-        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
         DATASET_HASH_FILE.write_text(current_hash)
-
         return vectordb
-    else:
-        # Load existing DB
+
+    try:
         return Chroma(
             persist_directory=str(CHROMA_DIR),
             embedding_function=embeddings,
             collection_name="teen_addiction",
         )
+    except Exception:
+        return build_vector_db(force_rebuild=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -570,7 +602,7 @@ def clear_chat_history(session_id: str = "default"):
 def get_all_sessions() -> list[str]:
     """Get all available chat session IDs."""
     import sqlite3
-    db_path = str(BASE_DIR / 'chat_history.db')
+    db_path = CHAT_DB.removeprefix("sqlite:///")
     if not os.path.exists(db_path):
         return []
     try:

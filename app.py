@@ -1,3 +1,11 @@
+# Streamlit Cloud: ChromaDB needs sqlite3 >= 3.35 (must run before any chroma import)
+try:
+    __import__("pysqlite3")
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
+
 import os
 
 # Must be set before ChromaDB / protobuf-using deps load (deploy fix)
@@ -1121,12 +1129,20 @@ with tab4:
 
     # ── Build Vector DB on first use ──────────────────────────────────────────
     if not st.session_state.chatbot_ready:
-        with st.spinner("Building vector database from dataset... (first time only)"):
+        with st.spinner(
+            "Building vector database from dataset... "
+            "(first load on cloud may take 2–3 minutes)"
+        ):
             try:
                 build_vector_db()
                 st.session_state.chatbot_ready = True
             except Exception as e:
                 st.error(f"Failed to initialize chatbot: {e}")
+                st.caption(
+                    "Deploy checklist: Python **3.12**, `pysqlite3-binary` in "
+                    "requirements.txt, dataset CSV in repo root, "
+                    "`OLLAMA_API_KEY` in Streamlit secrets."
+                )
                 st.session_state.chatbot_ready = False
 
     if not st.session_state.chatbot_ready:

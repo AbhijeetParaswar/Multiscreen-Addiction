@@ -16,3 +16,5 @@ chromadb>=0.5.0
 sentence-transformers>=3.0.0
 # Streamlit requires protobuf>=3.20,<6 — do NOT use Python 3.14 on deploy
 protobuf>=3.20.0,<6.0.0
+# ChromaDB on Streamlit Cloud needs sqlite >= 3.35
+pysqlite3-binary>=0.5.0
