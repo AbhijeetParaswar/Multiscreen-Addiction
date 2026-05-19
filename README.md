@@ -55,7 +55,13 @@ git push -u origin main
 1. Go to **[share.streamlit.io](https://share.streamlit.io)** and sign in with GitHub
 2. Click **"New app"**
 3. Select your **repository**, **branch** (`main`), and set **Main file path** to `app.py`
-4. Click **"Deploy!"**
+4. Click **Advanced settings** → set **Python version** to **3.12** (not 3.14)
+5. Add **Secrets** (for the AI chatbot):
+   ```toml
+   OLLAMA_API_KEY = "your_key_from_ollama.com/settings/keys"
+   OLLAMA_BASE_URL = "https://ollama.com"
+   ```
+6. Click **Deploy!**
 
 Your app will be live at:
 ```
