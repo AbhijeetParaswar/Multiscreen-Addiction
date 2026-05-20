@@ -22,6 +22,8 @@ warnings.filterwarnings('ignore')
 from dotenv import load_dotenv
 load_dotenv()
 
+import chatbot
+
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from sklearn.neighbors import KNeighborsRegressor
@@ -1037,10 +1039,6 @@ with tab3:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab4:
     import uuid
-    from chatbot import (
-        stream_ask, clear_chat_history, get_all_sessions,
-        get_session_preview,
-    )
 
     # ── Initialize session state ──────────────────────────────────────────────
     if "chat_session_id" not in st.session_state:
@@ -1100,16 +1098,16 @@ with tab4:
                 st.rerun()
         with col_clear:
             if st.button("Clear History", use_container_width=True):
-                clear_chat_history(st.session_state.chat_session_id)
+                chatbot.clear_chat_history(st.session_state.chat_session_id)
                 st.session_state.chat_messages = []
                 st.rerun()
 
         # Session list
-        sessions = get_all_sessions()
+        sessions = chatbot.get_all_sessions()
         if sessions:
             st.markdown("**Recent Sessions**")
             for sid in sessions[:5]:
-                preview = get_session_preview(sid)
+                preview = chatbot.get_session_preview(sid)
                 label = f"{sid}: {preview}"
                 if st.button(
                     label[:50] + ("..." if len(label) > 50 else ""),
@@ -1118,8 +1116,7 @@ with tab4:
                 ):
                     st.session_state.chat_session_id = sid
                     # Load history from DB
-                    from chatbot import get_chat_history
-                    history = get_chat_history(sid)
+                    history = chatbot.get_chat_history(sid)
                     st.session_state.chat_messages = [
                         {"role": "human" if m.type == "human" else "assistant",
                          "content": m.content}
@@ -1134,8 +1131,7 @@ with tab4:
             "(first load on cloud may take 2–3 minutes)"
         ):
             try:
-                from chatbot import build_vector_db
-                st.session_state.vectordb = build_vector_db(force_rebuild=True)
+                st.session_state.vectordb = chatbot.build_vector_db(force_rebuild=True)
                 st.session_state.chatbot_ready = True
             except Exception as e:
                 st.error(f"Failed to initialize chatbot: {e}")
@@ -1220,7 +1216,7 @@ with tab4:
                 full_response = ""
 
                 api_key = st.session_state.ollama_api_key.strip() or None
-                for chunk in stream_ask(
+                for chunk in chatbot.stream_ask(
                     question=prompt,
                     session_id=st.session_state.chat_session_id,
                     model_name=st.session_state.ollama_model,

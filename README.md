@@ -27,9 +27,13 @@
 your-repo/
 │
 ├── app.py                              ← Main Streamlit app
+├── chatbot.py                          ← RAG chatbot (Ollama Cloud)
 ├── requirements.txt                    ← Python dependencies
+├── .python-version                     ← Pin Python 3.12 for deploy
+├── .env.example                        ← Local env template
+├── .streamlit/secrets.toml.example     ← Streamlit Cloud secrets template
 ├── README.md                           ← This file
-└── teen_multiscreen_addiction_dataset.csv  ← Dataset (REQUIRED)
+└── teen_multiscreen_addiction_dataset.csv.xls  ← Dataset (REQUIRED)
 ```
 
 > ⚠️ **The CSV file must be present in the repo root.** The app will not start without it.
