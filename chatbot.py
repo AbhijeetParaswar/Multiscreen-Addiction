@@ -20,6 +20,8 @@ import tempfile
 
 # ChromaDB / OpenTelemetry protobuf compatibility (Streamlit Cloud & mobile deploy)
 os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+os.environ["CHROMA_TELEMETRY"] = "False"
 
 import glob
 import hashlib
@@ -35,6 +37,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -93,8 +96,9 @@ DATASET_HASH_FILE = (
     (CHROMA_DIR / ".dataset_hash") if CHROMA_DIR else None
 )
 
-# In-process cache (cloud uses in-memory Chroma — must not rebuild every message)
-_cached_vectordb: Chroma | None = None
+# In-process cache (must not rebuild every message; do not use st.cache_resource)
+_cached_vectordb = None
+_cached_embeddings = None
 
 DEFAULT_MODEL = "gpt-oss:120b-cloud"
 OLLAMA_CLOUD_BASE_URL = "https://ollama.com"
@@ -401,11 +405,14 @@ def _build_statistical_documents(df: pd.DataFrame) -> list[Document]:
 # ═══════════════════════════════════════════════════════════════════════════════
 def get_embeddings():
     """Initialize HuggingFace embeddings model (runs locally, no API key)."""
-    return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    global _cached_embeddings
+    if _cached_embeddings is None:
+        _cached_embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+    return _cached_embeddings
 
 
 def _chroma_is_valid() -> bool:
@@ -429,10 +436,10 @@ def _build_documents(df: pd.DataFrame) -> list:
     return splitter.split_documents(row_docs + stat_docs)
 
 
-def build_vector_db(force_rebuild: bool = False) -> Chroma:
+def build_vector_db(force_rebuild: bool = False):
     """
-    Build or load the ChromaDB vector store.
-    On Streamlit Cloud: in-memory only (repo filesystem is read-only).
+    Build or load the vector store.
+    On Streamlit Cloud: InMemoryVectorStore (no ChromaDB / httpx client issues).
     """
     global _cached_vectordb
 
@@ -445,12 +452,10 @@ def build_vector_db(force_rebuild: bool = False) -> Chroma:
     split_docs = _build_documents(df)
 
     if IS_CLOUD:
-        # No disk persistence — avoids "readonly database" on /mount/src
-        _cached_vectordb = Chroma.from_documents(
-            documents=split_docs,
-            embedding=embeddings,
-            collection_name="teen_addiction",
-        )
+        # LangChain in-memory store — avoids Chroma httpx "client has been closed"
+        store = InMemoryVectorStore(embedding=embeddings)
+        store.add_documents(split_docs)
+        _cached_vectordb = store
         return _cached_vectordb
 
     need_rebuild = force_rebuild or not _chroma_is_valid()
@@ -484,8 +489,10 @@ def build_vector_db(force_rebuild: bool = False) -> Chroma:
         return build_vector_db(force_rebuild=True)
 
 
-def get_vector_db(force_rebuild: bool = False) -> Chroma:
-    """Return cached vector DB (single build per server process on cloud)."""
+def get_vector_db(force_rebuild: bool = False, vectordb=None):
+    """Return cached vector DB, or use an existing instance from session state."""
+    if vectordb is not None:
+        return vectordb
     return build_vector_db(force_rebuild=force_rebuild)
 
 
@@ -552,6 +559,7 @@ def create_rag_chain(
     model_name: str = DEFAULT_MODEL,
     temperature: float = 0.7,
     ollama_api_key: str | None = None,
+    vectordb=None,
 ):
     """
     Create the full RAG chain with:
@@ -559,8 +567,7 @@ def create_rag_chain(
     - Chat history awareness
     - Ollama LLM (local or Ollama Cloud via OLLAMA_API_KEY)
     """
-    # Vector DB (cached — do not rebuild on every chat message)
-    vectordb = get_vector_db()
+    vectordb = get_vector_db(vectordb=vectordb)
     retriever = vectordb.as_retriever(
         search_type="mmr",  # Maximal Marginal Relevance for diverse results
         search_kwargs={"k": 8, "fetch_k": 20},
@@ -606,6 +613,7 @@ def ask(
     model_name: str = DEFAULT_MODEL,
     temperature: float = 0.7,
     ollama_api_key: str | None = None,
+    vectordb=None,
 ):
     """
     Ask a question and get a response with full RAG + history.
@@ -615,6 +623,7 @@ def ask(
         model_name=model_name,
         temperature=temperature,
         ollama_api_key=ollama_api_key,
+        vectordb=vectordb,
     )
 
     response = chain.invoke(
@@ -630,6 +639,7 @@ def stream_ask(
     model_name: str = DEFAULT_MODEL,
     temperature: float = 0.7,
     ollama_api_key: str | None = None,
+    vectordb=None,
 ):
     """
     Stream a response for real-time token display.
@@ -639,6 +649,7 @@ def stream_ask(
         model_name=model_name,
         temperature=temperature,
         ollama_api_key=ollama_api_key,
+        vectordb=vectordb,
     )
 
     for chunk in chain.stream(

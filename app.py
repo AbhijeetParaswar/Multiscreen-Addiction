@@ -1127,19 +1127,15 @@ with tab4:
                     ]
                     st.rerun()
 
-    # ── Build Vector DB on first use (cached for cloud — read-only filesystem) ─
-    @st.cache_resource(show_spinner=False)
-    def _init_chatbot_vector_db():
-        from chatbot import get_vector_db
-        return get_vector_db(force_rebuild=True)
-
-    if not st.session_state.chatbot_ready:
+    # ── Build Vector DB once per session (do not use cache_resource — closes httpx) ─
+    if "vectordb" not in st.session_state:
         with st.spinner(
             "Building vector database from dataset... "
             "(first load on cloud may take 2–3 minutes)"
         ):
             try:
-                _init_chatbot_vector_db()
+                from chatbot import build_vector_db
+                st.session_state.vectordb = build_vector_db(force_rebuild=True)
                 st.session_state.chatbot_ready = True
             except Exception as e:
                 st.error(f"Failed to initialize chatbot: {e}")
@@ -1149,8 +1145,11 @@ with tab4:
                     "`OLLAMA_API_KEY` in Streamlit secrets."
                 )
                 st.session_state.chatbot_ready = False
+                st.session_state.vectordb = None
+    elif not st.session_state.chatbot_ready:
+        st.session_state.chatbot_ready = True
 
-    if not st.session_state.chatbot_ready:
+    if not st.session_state.chatbot_ready or st.session_state.get("vectordb") is None:
         st.stop()
 
     # ── Model status bar ──────────────────────────────────────────────────────
@@ -1227,6 +1226,7 @@ with tab4:
                     model_name=st.session_state.ollama_model,
                     temperature=st.session_state.chat_temperature,
                     ollama_api_key=api_key,
+                    vectordb=st.session_state.vectordb,
                 ):
                     full_response += chunk
                     response_placeholder.markdown(full_response + "▌")
