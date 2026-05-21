@@ -489,6 +489,12 @@ def build_vector_db(force_rebuild: bool = False):
         return build_vector_db(force_rebuild=True)
 
 
+def set_active_vectordb(vectordb) -> None:
+    """Register the vector store for this session (used by app.py before stream_ask)."""
+    global _cached_vectordb
+    _cached_vectordb = vectordb
+
+
 def get_vector_db(force_rebuild: bool = False, vectordb=None):
     """Return cached vector DB, or use an existing instance from session state."""
     if vectordb is not None:

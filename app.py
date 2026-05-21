@@ -1216,13 +1216,17 @@ with tab4:
                 full_response = ""
 
                 api_key = st.session_state.ollama_api_key.strip() or None
+                # Use module cache (works on deploy without vectordb kwarg)
+                if hasattr(chatbot, "set_active_vectordb"):
+                    chatbot.set_active_vectordb(st.session_state.vectordb)
+                else:
+                    chatbot._cached_vectordb = st.session_state.vectordb
                 for chunk in chatbot.stream_ask(
                     question=prompt,
                     session_id=st.session_state.chat_session_id,
                     model_name=st.session_state.ollama_model,
                     temperature=st.session_state.chat_temperature,
                     ollama_api_key=api_key,
-                    vectordb=st.session_state.vectordb,
                 ):
                     full_response += chunk
                     response_placeholder.markdown(full_response + "▌")
