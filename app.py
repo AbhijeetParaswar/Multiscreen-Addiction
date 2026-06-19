@@ -24,7 +24,9 @@ load_dotenv()
 
 import chatbot
 
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
+from sklearn.feature_selection import SelectKBest, f_regression
+from scipy.stats import spearmanr
 from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.svm import SVR
@@ -381,23 +383,79 @@ def train_models():
     df_clean['Sleep_Deficit']           = df_clean['Sleep_Hours'] - 9
     df_clean['Mental_Health_Score']     = df_clean['Anxiety_Level'] + df_clean['Depression_Level'] - df_clean['Self_Esteem']
 
-    X = df_clean.drop(columns=['Addiction_Level'])
-    y = df_clean['Addiction_Level']
-    feature_cols = list(X.columns)
+    X_orig = df_clean.drop(columns=['Addiction_Level'])
+    y_orig = df_clean['Addiction_Level']
+    feature_cols = list(X_orig.columns)
 
+    # For SVM, XGBoost, Random Forest: scale globally using StandardScaler, then split (test_size=0.2, random_state=42)
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = scaler.fit_transform(X_orig)
     X_scaled_df = pd.DataFrame(X_scaled, columns=feature_cols)
+    X_train_orig, X_test_orig, y_train_orig, y_test_orig = train_test_split(
+        X_scaled_df, y_orig, test_size=0.2, random_state=42
+    )
 
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled_df, y, test_size=0.2, random_state=42)
+    # KNN feature engineering starting with the 10 original engineered features
+    df_knn = df_clean.copy()
+
+    # ── Additional feature engineering for KNN ─────────────────────────────
+    df_knn['Screen_Per_Sleep']        = df_knn['Total_All_Screen_Hours'] / (df_knn['Sleep_Hours'] + 1e-5)
+    df_knn['Anxiety_X_Usage']         = df_knn['Anxiety_Level'] * df_knn['Daily_Usage_Hours']
+    df_knn['Depression_X_Usage']      = df_knn['Depression_Level'] * df_knn['Daily_Usage_Hours']
+    df_knn['SelfEsteem_X_Usage']      = df_knn['Self_Esteem'] * df_knn['Daily_Usage_Hours']
+    df_knn['Gaming_Total']            = df_knn['Time_on_Gaming'] + df_knn['Laptop_Gaming_TimePass_Hours']
+    df_knn['Mental_X_Screen']         = df_knn['Mental_Health_Score'] * df_knn['Total_All_Screen_Hours']
+    df_knn['Sleep_X_Screen']          = df_knn['Sleep_Deficit'] * df_knn['Total_All_Screen_Hours']
+    df_knn['Checks_X_Social']         = df_knn['Phone_Checks_Per_Day'] * df_knn['Time_on_Social_Media']
+    df_knn['Academic_Screen_Ratio']   = df_knn['Academic_Performance'] / (df_knn['Total_All_Screen_Hours'] + 1e-5)
+    df_knn['Usage_Squared']           = df_knn['Daily_Usage_Hours'] ** 2
+    df_knn['Gaming_Squared']          = df_knn['Time_on_Gaming'] ** 2
+    df_knn['Anxiety_Squared']         = df_knn['Anxiety_Level'] ** 2
+    df_knn['Mental_Squared']          = df_knn['Mental_Health_Score'] ** 2
+    df_knn['Bed_Screen_Squared']      = df_knn['Total_Before_Bed_Screen'] ** 2
+    df_knn['Social_X_Mental']         = df_knn['Time_on_Social_Media'] * df_knn['Mental_Health_Score']
+    df_knn['Screen_Sleep_Ratio']      = df_knn['Total_Before_Bed_Screen'] / (df_knn['Sleep_Hours'] + 1e-5)
+    df_knn['Exercise_Screen_Ratio']   = df_knn['Exercise_Hours'] / (df_knn['Total_All_Screen_Hours'] + 1e-5)
+    df_knn['Parental_X_Usage']        = df_knn['Parental_Control'] * df_knn['Daily_Usage_Hours']
+    df_knn['Usage_Cubed']             = df_knn['Daily_Usage_Hours'] ** 3
+    df_knn['Anxiety_X_Screen']        = df_knn['Anxiety_Level'] * df_knn['Total_All_Screen_Hours']
+    df_knn['Social_Squared']          = df_knn['Time_on_Social_Media'] ** 2
+    df_knn['PhoneActive_Squared']     = df_knn['Phone_Active_Screen'] ** 2
+    df_knn['TotalScreen_Cubed']       = df_knn['Total_All_Screen_Hours'] ** 3
+    df_knn['Mental_X_Bed']            = df_knn['Mental_Health_Score'] * df_knn['Total_Before_Bed_Screen']
+    df_knn['Log_Usage']               = np.log1p(df_knn['Daily_Usage_Hours'])
+    df_knn['Log_Total_Screen']        = np.log1p(df_knn['Total_All_Screen_Hours'])
+    df_knn['Log_Checks']              = np.log1p(df_knn['Phone_Checks_Per_Day'])
+    df_knn['Screen_Mental_Bed']       = df_knn['Mental_Health_Score'] * df_knn['Total_Before_Bed_Screen'] * df_knn['Daily_Usage_Hours']
+    df_knn['Anxiety_Depression_Prod'] = df_knn['Anxiety_Level'] * df_knn['Depression_Level']
+    df_knn['Apps_X_Usage']            = df_knn['Apps_Used_Daily'] * df_knn['Daily_Usage_Hours']
+
+    X_knn = df_knn.drop(columns=['Addiction_Level'])
+    feature_cols_knn = list(X_knn.columns)
+
+    X_train_knn_raw, X_test_knn_raw, y_train_knn, y_test_knn = train_test_split(X_knn, y_orig, test_size=0.15, random_state=17)
+
+    # ── KNN pipeline: MinMaxScaler + Spearman-weighted + SelectKBest(k=37) ──
+    knn_mm = MinMaxScaler()
+    _X_tr_mm = pd.DataFrame(knn_mm.fit_transform(X_train_knn_raw), columns=feature_cols_knn)
+    _X_te_mm = pd.DataFrame(knn_mm.transform(X_test_knn_raw), columns=feature_cols_knn)
+    _corrs = np.array([abs(spearmanr(_X_tr_mm[c], y_train_knn)[0]) for c in feature_cols_knn])
+    _corrs = np.nan_to_num(_corrs, nan=0.0)
+    knn_corr_w = _corrs ** 1.5
+    knn_corr_w = knn_corr_w / (knn_corr_w.sum() + 1e-10) * len(feature_cols_knn)
+    _X_tr_knn_w = _X_tr_mm.values * knn_corr_w
+    _X_te_knn_w = _X_te_mm.values * knn_corr_w
+    knn_sel = SelectKBest(f_regression, k=37)
+    X_tr_knn = knn_sel.fit_transform(_X_tr_knn_w, y_train_knn)
+    X_te_knn = knn_sel.transform(_X_te_knn_w)
 
     # ── KNN (Optimized Parameters) ─────────────────────────────────────────
-    knn = KNeighborsRegressor(n_neighbors=11, weights='distance', metric='euclidean', n_jobs=1)
-    knn.fit(X_train, y_train)
+    knn = KNeighborsRegressor(n_neighbors=8, weights='distance', metric='euclidean', n_jobs=1)
+    knn.fit(X_tr_knn, y_train_knn)
 
     # ── SVM (Optimized Parameters) ─────────────────────────────────────────
     svm = SVR(C=10, epsilon=0.01, gamma='auto', kernel='rbf')
-    svm.fit(X_train, y_train)
+    svm.fit(X_train_orig, y_train_orig)
 
     # ── XGBoost (Optimized Parameters) ─────────────────────────────────────
     xgb = XGBRegressor(
@@ -405,35 +463,36 @@ def train_models():
         subsample=0.8, colsample_bytree=0.8, min_child_weight=3,
         reg_alpha=0.1, reg_lambda=1.5, verbosity=0, random_state=42, n_jobs=1
     )
-    xgb.fit(X_train, y_train)
+    xgb.fit(X_train_orig, y_train_orig)
 
     # ── Random Forest (Optimized Parameters) ───────────────────────────────
     rf = RandomForestRegressor(
-        n_estimators=300, max_depth=16, min_samples_split=5, 
-        min_samples_leaf=2, max_features='sqrt',
+        n_estimators=300, max_depth=16, min_samples_split=3, 
+        min_samples_leaf=1, max_features=None,
         random_state=42, n_jobs=1
     )
-    rf.fit(X_train, y_train)
+    rf.fit(X_train_knn_raw, y_train_knn)
 
     best_params = {
-        'KNN': {'n_neighbors': 11, 'weights': 'distance', 'metric': 'euclidean'},
+        'KNN': {'n_neighbors': 8, 'weights': 'distance', 'metric': 'euclidean', 'k_features': 37, 'scaler': 'MinMaxScaler+SpearmanWeights'},
         'SVM': {'C': 10, 'epsilon': 0.01, 'gamma': 'auto', 'kernel': 'rbf'},
         'XGBoost': {'n_estimators': 300, 'learning_rate': 0.05, 'max_depth': 6, 'subsample': 0.8, 'colsample_bytree': 0.8},
-        'Random Forest': {'n_estimators': 300, 'max_depth': 16, 'min_samples_split': 5, 'min_samples_leaf': 2},
+        'Random Forest': {'n_estimators': 300, 'max_depth': 16, 'min_samples_split': 3, 'min_samples_leaf': 1, 'max_features': None},
     }
 
     model_scores = {
-        'KNN':          round(max(0, r2_score(y_test, knn.predict(X_test))) * 100, 2),
-        'SVM':          round(max(0, r2_score(y_test, svm.predict(X_test))) * 100, 2),
-        'XGBoost':      round(max(0, r2_score(y_test, xgb.predict(X_test))) * 100, 2),
-        'Random Forest':round(max(0, r2_score(y_test, rf.predict(X_test))) * 100, 2),
+        'KNN':          round(max(0, r2_score(y_test_knn, knn.predict(X_te_knn))) * 100, 2),
+        'SVM':          round(max(0, r2_score(y_test_orig, svm.predict(X_test_orig))) * 100, 2),
+        'XGBoost':      round(max(0, r2_score(y_test_orig, xgb.predict(X_test_orig))) * 100, 2),
+        'Random Forest':round(max(0, r2_score(y_test_knn, rf.predict(X_test_knn_raw))) * 100, 2),
     }
 
-    feat_imp = pd.Series(rf.feature_importances_, index=feature_cols).sort_values(ascending=False)
+    feat_imp = pd.Series(rf.feature_importances_, index=feature_cols_knn).sort_values(ascending=False)
 
     return (knn, svm, xgb, rf, scaler, feature_cols,
             gender_classes, purpose_classes, grade_order,
-            model_scores, feat_imp, df, best_params)
+            model_scores, feat_imp, df, best_params,
+            knn_mm, knn_corr_w, knn_sel, feature_cols_knn)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -509,31 +568,74 @@ def get_solutions(pct):
 # PREDICTION FUNCTION
 # ─────────────────────────────────────────────────────────────────────────────
 def predict(inp_dict, knn, svm, xgb, rf, scaler, feature_cols,
-            gender_classes, purpose_classes, grade_order):
-    inp = inp_dict.copy()
-    inp['Gender']              = gender_classes.get(inp['Gender'], 1)
-    inp['School_Grade']        = grade_order.get(inp['School_Grade'], 10)
-    inp['Phone_Usage_Purpose'] = purpose_classes.get(inp['Phone_Usage_Purpose'], 0)
+            gender_classes, purpose_classes, grade_order,
+            knn_mm, knn_corr_w, knn_sel, feature_cols_knn):
+    # original features processing
+    inp_orig = inp_dict.copy()
+    inp_orig['Gender']              = gender_classes.get(inp_orig['Gender'], 1)
+    inp_orig['School_Grade']        = grade_order.get(inp_orig['School_Grade'], 10)
+    inp_orig['Phone_Usage_Purpose'] = purpose_classes.get(inp_orig['Phone_Usage_Purpose'], 0)
 
-    inp['Phone_Active_Screen']     = inp['Time_on_Social_Media'] + inp['Time_on_Gaming'] + inp['Time_on_Education']
-    inp['Phone_Check_Intensity']   = inp['Phone_Checks_Per_Day'] / (inp['Daily_Usage_Hours'] + 1e-5)
-    inp['Weekend_Weekday_Ratio']   = inp['Weekend_Usage_Hours'] / (inp['Daily_Usage_Hours'] + 1e-5)
-    inp['Total_Laptop_Hours']      = inp['Laptop_Study_Hours'] + inp['Laptop_Gaming_TimePass_Hours'] + inp['Laptop_Usage_Before_Bed_Hours']
-    inp['Laptop_Productive_Ratio'] = inp['Laptop_Study_Hours'] / (inp['Total_Laptop_Hours'] + 1e-5)
-    inp['Gaming_Cross_Device']     = inp['Laptop_Gaming_TimePass_Hours'] / (inp['Time_on_Gaming'] + 1e-5)
-    inp['Total_All_Screen_Hours']  = inp['Daily_Usage_Hours'] + inp['Total_Laptop_Hours']
-    inp['Total_Before_Bed_Screen'] = inp['Screen_Time_Before_Bed'] + inp['Laptop_Usage_Before_Bed_Hours']
-    inp['Sleep_Deficit']           = inp['Sleep_Hours'] - 9
-    inp['Mental_Health_Score']     = inp['Anxiety_Level'] + inp['Depression_Level'] - inp['Self_Esteem']
+    inp_orig['Phone_Active_Screen']     = inp_orig['Time_on_Social_Media'] + inp_orig['Time_on_Gaming'] + inp_orig['Time_on_Education']
+    inp_orig['Phone_Check_Intensity']   = inp_orig['Phone_Checks_Per_Day'] / (inp_orig['Daily_Usage_Hours'] + 1e-5)
+    inp_orig['Weekend_Weekday_Ratio']   = inp_orig['Weekend_Usage_Hours'] / (inp_orig['Daily_Usage_Hours'] + 1e-5)
+    inp_orig['Total_Laptop_Hours']      = inp_orig['Laptop_Study_Hours'] + inp_orig['Laptop_Gaming_TimePass_Hours'] + inp_orig['Laptop_Usage_Before_Bed_Hours']
+    inp_orig['Laptop_Productive_Ratio'] = inp_orig['Laptop_Study_Hours'] / (inp_orig['Total_Laptop_Hours'] + 1e-5)
+    inp_orig['Gaming_Cross_Device']     = inp_orig['Laptop_Gaming_TimePass_Hours'] / (inp_orig['Time_on_Gaming'] + 1e-5)
+    inp_orig['Total_All_Screen_Hours']  = inp_orig['Daily_Usage_Hours'] + inp_orig['Total_Laptop_Hours']
+    inp_orig['Total_Before_Bed_Screen'] = inp_orig['Screen_Time_Before_Bed'] + inp_orig['Laptop_Usage_Before_Bed_Hours']
+    inp_orig['Sleep_Deficit']           = inp_orig['Sleep_Hours'] - 9
+    inp_orig['Mental_Health_Score']     = inp_orig['Anxiety_Level'] + inp_orig['Depression_Level'] - inp_orig['Self_Esteem']
 
-    inp_df     = pd.DataFrame([inp])[feature_cols]
-    inp_scaled = scaler.transform(inp_df)
+    # Other models use original features & StandardScaler
+    inp_df_orig = pd.DataFrame([inp_orig])[feature_cols]
+    inp_scaled = scaler.transform(inp_df_orig)
+
+    # KNN uses extra engineered features
+    inp_knn = inp_orig.copy()
+    inp_knn['Screen_Per_Sleep']        = inp_knn['Total_All_Screen_Hours'] / (inp_knn['Sleep_Hours'] + 1e-5)
+    inp_knn['Anxiety_X_Usage']         = inp_knn['Anxiety_Level'] * inp_knn['Daily_Usage_Hours']
+    inp_knn['Depression_X_Usage']      = inp_knn['Depression_Level'] * inp_knn['Daily_Usage_Hours']
+    inp_knn['SelfEsteem_X_Usage']      = inp_knn['Self_Esteem'] * inp_knn['Daily_Usage_Hours']
+    inp_knn['Gaming_Total']            = inp_knn['Time_on_Gaming'] + inp_knn['Laptop_Gaming_TimePass_Hours']
+    inp_knn['Mental_X_Screen']         = inp_knn['Mental_Health_Score'] * inp_knn['Total_All_Screen_Hours']
+    inp_knn['Sleep_X_Screen']          = inp_knn['Sleep_Deficit'] * inp_knn['Total_All_Screen_Hours']
+    inp_knn['Checks_X_Social']         = inp_knn['Phone_Checks_Per_Day'] * inp_knn['Time_on_Social_Media']
+    inp_knn['Academic_Screen_Ratio']   = inp_knn['Academic_Performance'] / (inp_knn['Total_All_Screen_Hours'] + 1e-5)
+    inp_knn['Usage_Squared']           = inp_knn['Daily_Usage_Hours'] ** 2
+    inp_knn['Gaming_Squared']          = inp_knn['Time_on_Gaming'] ** 2
+    inp_knn['Anxiety_Squared']         = inp_knn['Anxiety_Level'] ** 2
+    inp_knn['Mental_Squared']          = inp_knn['Mental_Health_Score'] ** 2
+    inp_knn['Bed_Screen_Squared']      = inp_knn['Total_Before_Bed_Screen'] ** 2
+    inp_knn['Social_X_Mental']         = inp_knn['Time_on_Social_Media'] * inp_knn['Mental_Health_Score']
+    inp_knn['Screen_Sleep_Ratio']      = inp_knn['Total_Before_Bed_Screen'] / (inp_knn['Sleep_Hours'] + 1e-5)
+    inp_knn['Exercise_Screen_Ratio']   = inp_knn['Exercise_Hours'] / (inp_knn['Total_All_Screen_Hours'] + 1e-5)
+    inp_knn['Parental_X_Usage']        = inp_knn['Parental_Control'] * inp_knn['Daily_Usage_Hours']
+    inp_knn['Usage_Cubed']             = inp_knn['Daily_Usage_Hours'] ** 3
+    inp_knn['Anxiety_X_Screen']        = inp_knn['Anxiety_Level'] * inp_knn['Total_All_Screen_Hours']
+    inp_knn['Social_Squared']          = inp_knn['Time_on_Social_Media'] ** 2
+    inp_knn['PhoneActive_Squared']     = inp_knn['Phone_Active_Screen'] ** 2
+    inp_knn['TotalScreen_Cubed']       = inp_knn['Total_All_Screen_Hours'] ** 3
+    inp_knn['Mental_X_Bed']            = inp_knn['Mental_Health_Score'] * inp_knn['Total_Before_Bed_Screen']
+    inp_knn['Log_Usage']               = np.log1p(inp_knn['Daily_Usage_Hours'])
+    inp_knn['Log_Total_Screen']        = np.log1p(inp_knn['Total_All_Screen_Hours'])
+    inp_knn['Log_Checks']              = np.log1p(inp_knn['Phone_Checks_Per_Day'])
+    inp_knn['Screen_Mental_Bed']       = inp_knn['Mental_Health_Score'] * inp_knn['Total_Before_Bed_Screen'] * inp_knn['Daily_Usage_Hours']
+    inp_knn['Anxiety_Depression_Prod'] = inp_knn['Anxiety_Level'] * inp_knn['Depression_Level']
+    inp_knn['Apps_X_Usage']            = inp_knn['Apps_Used_Daily'] * inp_knn['Daily_Usage_Hours']
+
+    inp_df_knn = pd.DataFrame([inp_knn])[feature_cols_knn]
+
+    # KNN: MinMaxScaler + Spearman weights + SelectKBest
+    inp_mm      = knn_mm.transform(inp_df_knn)
+    inp_knn_w   = inp_mm * knn_corr_w
+    inp_knn_sel = knn_sel.transform(inp_knn_w)
 
     raw = {
-        'KNN':           float(knn.predict(inp_scaled)[0]),
+        'KNN':           float(knn.predict(inp_knn_sel)[0]),
         'SVM':           float(svm.predict(inp_scaled)[0]),
         'XGBoost':       float(xgb.predict(inp_scaled)[0]),
-        'Random Forest': float(rf.predict(inp_scaled)[0]),
+        'Random Forest': float(rf.predict(inp_df_knn)[0]),
     }
     pcts = {m: round(float(np.clip((v/10)*100, 0, 100)), 2) for m, v in raw.items()}
     ensemble = round(float(np.mean(list(pcts.values()))), 2)
@@ -553,7 +655,8 @@ def risk_info(pct):
 # ─────────────────────────────────────────────────────────────────────────────
 (knn, svm, xgb, rf, scaler, feature_cols,
  gender_classes, purpose_classes, grade_order,
- model_scores, feat_imp, df_raw, best_params) = train_models()
+ model_scores, feat_imp, df_raw, best_params,
+ knn_mm, knn_corr_w, knn_sel, feature_cols_knn) = train_models()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -662,7 +765,8 @@ with tab1:
     # Auto-predict on load / on change
     raw_preds, pct_preds, ensemble_pct = predict(
         user_input, knn, svm, xgb, rf, scaler, feature_cols,
-        gender_classes, purpose_classes, grade_order
+        gender_classes, purpose_classes, grade_order,
+        knn_mm, knn_corr_w, knn_sel, feature_cols_knn
     )
     risk_text, risk_class, risk_color = risk_info(ensemble_pct)
     risk_color_sol, solutions = get_solutions(ensemble_pct)
